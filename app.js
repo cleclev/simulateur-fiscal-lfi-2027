@@ -157,7 +157,7 @@
     printMeta.innerHTML = `
       <div><b>PROFIL</b><span>${relationshipLabel} · ${euro((data.income1 + data.income2) * 12)} de revenus/an · ${childAges.length} enfant${childAges.length>1?"s":""}</span></div>
       <div><b>HYPOTHÈSES</b><span>${params.irScenario==="a"?"Barème 2026 individualisé":"Projection 14 tranches 2022"} · Crédit enfant ${euro(params.childCredit)} · Livret A ${String(params.livretInflation).replace(".",",")} %</span></div>
-      <div><b>PATRIMOINE</b><span>${euro(data.propertyValue)} immobilier · ${euro(data.financialNet)} financier · ${euro(data.inheritance)} d’héritage envisagé</span></div>`;
+      <div><b>PATRIMOINE</b><span>${euro(data.propertyValue)} immobilier · ${euro(data.financialNet + data.livretA)} financier (dont Livret A) · ${euro(data.inheritance)} d’héritage envisagé</span></div>`;
     const annual=document.querySelector("#annual-card");
     annual.className=`verdict-card ${r.recurrent>=0?"gain":"loss"}`;
     annual.innerHTML=`<small>Bilan annuel récurrent</small><div class="big-number">${signed(r.recurrent)} / an</div><p>${signed(r.recurrent/12)} / mois</p><p><strong>2026 :</strong> ${euro(r.annualNet2026)}<br><strong>LFI 2027 :</strong> ${euro(r.annualNet2027)}</p>`;
@@ -172,14 +172,21 @@
     document.querySelector("#alerts").innerHTML=alerts.map(a=>`<span class="badge ${a.type==="danger"?"danger":a.type==="info"?"info":""}">${a.text}</span>`).join("");
   }
   function renderTable(rows) {
-    document.querySelector("#comparison-table tbody").innerHTML=rows.map(row=>`<tr><td>${row[0]}</td><td>${euro(row[1])}</td><td>${euro(row[2])}</td><td style="color:${row[3]>=0?"var(--green)":"var(--red)"}">${signed(row[3])}</td></tr>`).join("");
+    document.querySelector("#comparison-table tbody").innerHTML=rows.map(row=>{
+      const impact = row[3];
+      const tone = impact > 0 ? "gain" : impact < 0 ? "loss" : "neutral";
+      return `<tr><td>${row[0]}</td><td>${euro(row[1])}</td><td>${euro(row[2])}</td><td class="ecart-${tone}">${signed(impact)}</td></tr>`;
+    }).join("");
   }
   function renderChart() {
-    const rows = lastResult.table.slice(0, 2).map(row => ({
-      label: row[0].startsWith("Revenus") ? "Revenus / aides" : "Impôts annuels",
-      current: row[1],
-      future: row[2]
-    }));
+    const r = lastResult;
+    const data = collectData();
+    const revenues2026 = r.income2026Annual + (data.apl + data.familyBenefits + data.rsaAah) * 12 + r.livretGain2026;
+    const revenues2027 = r.income2027Annual + r.table[1][2] + r.livretGain2027 + data.canteenChildren * 600;
+    const rows = [
+      {label:"Revenus / aides", current:revenues2026, future:revenues2027},
+      {label:"Impôts annuels", current:r.tax2026Total, future:r.tax2027Total}
+    ];
     const max = Math.max(...rows.flatMap(row => [row.current, row.future]), 1);
     const w=760, h=250, left=180, bar=28, gap=78, usable=w-left-30;
     const bars = rows.map((row, i) => {

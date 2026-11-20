@@ -79,7 +79,12 @@
       if (income <= 0) continue;
       tax += progressiveTax(EUR(income) + dividedGains, set);
     }
-    return Math.max(0, tax - credit);
+    tax = Math.max(0, tax - credit);
+    if (params.irScenario !== "b") {
+      const married = data.relationship === "married";
+      tax = Math.max(0, tax - decote(tax, married));
+    }
+    return tax;
   }
 
   function ifi2026(propertyValue) {
@@ -127,13 +132,13 @@
       relationship:"single", age1:35, age2:35, childrenUnder14:0, childrenOver14:0, canteenChildren:0,
       status1:"Salarié du privé", status1Status:undefined, income1:1500, income2:0, status2:"Salarié du privé",
       bonus1:0, bonus2:0, apl:0, familyBenefits:0, rsaAah:0, rentalIncome:0,
-      livretA:10000, financialNet:0, financialGains:0, lifeInsurance:0, lifeForeignPct:0, lifeAge:"under8", per:0, professionalAssets:0,
+      livretA:0, financialNet:0, financialGains:0, lifeInsurance:0, lifeForeignPct:0, lifeAge:"under8", per:0, professionalAssets:0,
       propertyCount:0, propertyValue:0, passoire:false, vacant:false, top20:false, inheritance:0, lifetimeDonations:0, donorParents:1, heirs:1, dutreil:false
     }, data);
 
     const annual1 = EUR(data.income1) * 12;
     const annual2 = EUR(data.income2) * 12;
-    const rni2026 = annual1 + annual2 + EUR(data.rentalIncome);
+    const rni2026 = annual1 * .90 + annual2 * .90 + EUR(data.rentalIncome);
     const tax2026 = ir2026Foyer(rni2026, data);
     const p2026 = parts2026(data);
     const householdTmi = tmi2026(rni2026 / p2026.parts);
@@ -162,7 +167,7 @@
     const apl2027 = EUR(data.apl) * 1.10;
     const family2027 = EUR(data.familyBenefits) * 1.10;
     const rsa2027 = EUR(data.rsaAah) * (["Bénéficiaire AAH ou RSA"].includes(data.status1) ? 1700 / Math.max(EUR(data.rsaAah),1) : 1);
-    const social2027 = (apl2027 + family2027) * 12;
+    const social2027 = (apl2027 + family2027 + EUR(rsa2027)) * 12;
 
     const children = EUR(data.childrenUnder14) + EUR(data.childrenOver14);
     let autonomyThreshold = 1337;
@@ -176,7 +181,10 @@
     const canteen2027 = EUR(data.canteenChildren) * 600;
     const gains2027 = gains2026 * (householdTmi + .186);
 
-    const incomes2027 = [(salary1 + EUR(data.bonus1)/12) * 12, (salary2 + EUR(data.bonus2)/12) * 12].filter(v => v > 0);
+    const incomes2027 = [
+      ((salary1 + EUR(data.bonus1)/12) * 12) * .90,
+      ((salary2 + EUR(data.bonus2)/12) * 12) * .90
+    ].filter(v => v > 0);
     const tax2027 = ir2027Individual(incomes2027, 0, data, params);
     const lifeTax2026 = EUR(data.lifeInsurance) * (data.lifeAge === "under8" ? .30 : .247);
     const lifeForeignLoss2027 = EUR(data.lifeInsurance) * EUR(data.lifeForeignPct) / 100 * (data.lifeAge === "under8" ? .30 : .247);
@@ -210,19 +218,28 @@
     const patrimonial2027 = -estateLoss - Math.max(0,taxInheritance2027-taxInheritance2026);
     const patrimonial = taxInheritance2026 - taxInheritance2027 - estateLoss;
 
+    const aids2026 = (EUR(data.apl)+EUR(data.familyBenefits)+EUR(data.rsaAah))*12;
+    const aids2027 = social2027 + autonomyMonthly*12;
+    const capitalNet2026 = livretGain2026 - capitalTax2026 - lifeTax2026 + perEconomy2026;
+    const capitalNet2027 = livretGain2027 + canteen2027 - gains2027 - lifeForeignLoss2027;
+    const wealthCost2026 = ifi2026Amount;
+    const wealthCost2027 = isf.tax + zucman;
+    const successionCost2026 = taxInheritance2026 + estateLoss;
+    const successionCost2027 = taxInheritance2027 + estateLoss;
     const table = [
       ["Revenus & salaires", income2026Annual, income2027Annual, income2027Annual-income2026Annual],
-      ["Retraites & aides sociales", (EUR(data.apl)+EUR(data.familyBenefits)+EUR(data.rsaAah))*12, social2027+autonomyMonthly*12, (social2027+autonomyMonthly*12)-(EUR(data.apl)+EUR(data.familyBenefits)+EUR(data.rsaAah))*12],
-      ["Impôt sur le revenu", tax2026, tax2027, tax2027-tax2026],
-      ["Épargne & fiscalité du capital", capitalTax2026+lifeTax2026-perEconomy2026+livretGain2026, gains2027+lifeForeignLoss2027+livretGain2027+canteen2027, (gains2027+lifeForeignLoss2027+livretGain2027+canteen2027)-(capitalTax2026+lifeTax2026-perEconomy2026+livretGain2026)],
-      ["IFI / ISF climatique & Zucman", ifi2026Amount, isf.tax+zucman, isf.tax+zucman-ifi2026Amount],
-      ["Droits de succession & immobilier", taxInheritance2026+estateLoss, taxInheritance2027+estateLoss, taxInheritance2027-taxInheritance2026]
+      ["Retraites & aides sociales", aids2026, aids2027, aids2027-aids2026],
+      ["Impôt sur le revenu", tax2026, tax2027, -(tax2027-tax2026)],
+      ["Épargne & fiscalité du capital", capitalNet2026, capitalNet2027, capitalNet2027-capitalNet2026],
+      ["IFI / ISF climatique & Zucman", wealthCost2026, wealthCost2027, -(wealthCost2027-wealthCost2026)],
+      ["Droits de succession & immobilier", successionCost2026, successionCost2027, 0]
     ];
 
     return {
       recurrent, monthly: recurrent/12, patrimonial, patrimonial2027,
       annualNet2026, annualNet2027, tax2026, tax2027,
       income2026Annual, income2027Annual, livretGain2026, livretGain2027,
+      tax2026Total, tax2027Total,
       taxInheritance2026, taxInheritance2027, estateLoss, ifi2026: ifi2026Amount, isf,
       zucchini: zucman, table,
       alerts: buildAlerts(data, rni2026, params)
