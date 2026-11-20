@@ -151,6 +151,13 @@
     const data=collectData(), params=collectParams();
     lastResult=Calculator.calculate(data,params);
     const r=lastResult;
+    const relationshipLabel = {single:"Célibataire",married:"Marié ou pacsé",cohabiting:"Concubinage"}[data.relationship] || "Célibataire";
+    const childAges = data.childrenAges || [];
+    const printMeta = document.querySelector("#print-meta");
+    printMeta.innerHTML = `
+      <div><b>PROFIL</b><span>${relationshipLabel} · ${euro((data.income1 + data.income2) * 12)} de revenus/an · ${childAges.length} enfant${childAges.length>1?"s":""}</span></div>
+      <div><b>HYPOTHÈSES</b><span>${params.irScenario==="a"?"Barème 2026 individualisé":"Projection 14 tranches 2022"} · Crédit enfant ${euro(params.childCredit)} · Livret A ${String(params.livretInflation).replace(".",",")} %</span></div>
+      <div><b>PATRIMOINE</b><span>${euro(data.propertyValue)} immobilier · ${euro(data.financialNet)} financier · ${euro(data.inheritance)} d’héritage envisagé</span></div>`;
     const annual=document.querySelector("#annual-card");
     annual.className=`verdict-card ${r.recurrent>=0?"gain":"loss"}`;
     annual.innerHTML=`<small>Bilan annuel récurrent</small><div class="big-number">${signed(r.recurrent)} / an</div><p>${signed(r.recurrent/12)} / mois</p><p><strong>2026 :</strong> ${euro(r.annualNet2026)}<br><strong>LFI 2027 :</strong> ${euro(r.annualNet2027)}</p>`;
@@ -230,7 +237,10 @@
   steps.forEach(s=>s.addEventListener("click",()=>goTo(Number(s.dataset.step))));
   document.querySelector("#prev").addEventListener("click",()=>goTo(current-1));
   document.querySelector("#next").addEventListener("click",()=>{render();goTo(current===5?5:current+1)});
-  document.querySelector("#print").addEventListener("click",()=>window.print());
+  document.querySelector("#print").addEventListener("click",()=>{
+    render();
+    window.print();
+  });
 
   document.querySelectorAll("[data-dialog]").forEach(button => {
     button.addEventListener("click", () => {
